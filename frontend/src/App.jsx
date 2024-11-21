@@ -1,6 +1,6 @@
 // src/App.jsx
 import React from 'react';
-import HangmanGame from './assets/components/HangmanGame';
+import HangmanGame from './components/HangmanGame';
 
 import './index.css'; // Import Tailwind CSS
 
