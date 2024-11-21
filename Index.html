@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hangman Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-md max-w-md w-full">
+        <h1 class="text-3xl font-bold mb-6 text-center text-primary">Hangman Game</h1>
+        <div id="game-container" class="space-y-4">
+            <div id="word-display" class="text-2xl font-mono text-center mb-4"></div>
+            <div id="guesses" class="text-center mb-4"></div>
+            <div id="turns" class="text-center mb-4"></div>
+            <input type="text" id="guess-input" maxlength="1" class="w-full p-2 border rounded-md" placeholder="Enter a letter">
+            <button id="guess-button" class="w-full bg-primary text-white py-2 rounded-md hover:bg-primary-dark transition-colors">Guess</button>
+            <button id="new-game-button" class="w-full bg-green-500 text-white py-2 rounded-md hover:bg-green-600 transition-colors mt-4">New Game</button>
+        </div>
+        <div id="result" class="mt-4 text-center font-bold"></div>
+    </div>
+
+    <script>
+        // This is where we'd integrate with the Move runtime
+        // For now, we'll simulate the game logic in JavaScript
+
+        let word = '';
+        let guesses = [];
+        let turns = 10;
+
+        function newGame() {
+            word = getRandomWord();
+            guesses = [];
+            turns = 10;
+            updateDisplay();
+        }
+
+        function getRandomWord() {
+            const words = ['secret', 'puzzle', 'hangman'];
+            return words[Math.floor(Math.random() * words.length)];
+        }
+
+        function updateDisplay() {
+            const wordDisplay = document.getElementById('word-display');
+            const guessesDisplay = document.getElementById('guesses');
+            const turnsDisplay = document.getElementById('turns');
+            const resultDisplay = document.getElementById('result');
+
+            wordDisplay.textContent = word.split('').map(char => 
+                guesses.includes(char) ? char : '_'
+            ).join(' ');
+
+            guessesDisplay.textContent = `Guesses: ${guesses.join(', ')}`;
+            turnsDisplay.textContent = `Turns left: ${turns}`;
+            resultDisplay.textContent = '';
+        }
+
+        function makeGuess(letter) {
+            if (guesses.includes(letter)) {
+                return;
+            }
+
+            guesses.push(letter);
+
+            if (!word.includes(letter)) {
+                turns--;
+            }
+
+            updateDisplay();
+
+            if (turns === 0) {
+                document.getElementById('result').textContent = 'You lose!';
+            } else if (!word.split('').some(char => !guesses.includes(char))) {
+                document.getElementById('result').textContent = 'You win!';
+            }
+        }
+
+        document.getElementById('guess-button').addEventListener('click', () => {
+            const input = document.getElementById('guess-input');
+            makeGuess(input.value.toLowerCase());
+            input.value = '';
+        });
+
+        document.getElementById('new-game-button').addEventListener('click', newGame);
+
+        newGame();
+    </script>
+</body>
+</html>
