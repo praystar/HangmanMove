@@ -1,15 +1,13 @@
 [package]
-name = "hang-man"
+name = "Hang-man"
 version = "1.0.0"
 authors = []
-
 [addresses]
-
+metaschool = "0x94fa288c855eccfa184bdfff247a74a7698106721a79be0dc37a6ac6789a4a3d"
+std = "0x1"
 [dev-addresses]
-
 [dependencies.AptosFramework]
-git = "https://github.com/aptos-labs/aptos-framework.git"
+git = "https://github.com/aptos-labs/aptos-core.git"
 rev = "mainnet"
-subdir = "aptos-framework"
-
+subdir = "aptos-move/framework/aptos-framework"
 [dev-dependencies]
