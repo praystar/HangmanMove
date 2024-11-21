@@ -1,145 +1,122 @@
-module hangman_game::hangman {
+module 0x94fa288c855eccfa184bdfff247a74a7698106721a79be0dc37a6ac6789a4a3d::hangman {
     use std::vector;
-    use std::string;
-    use aptos_std::string_utils;
+    use std::string::{Self, String};
     use aptos_framework::account;
-    use aptos_framework::event;
+    use aptos_framework::timestamp;
+    use aptos_framework::signer;
 
-    /// Struct to store game state
+    /// Represents the state of a Hangman game
     struct GameState has key {
-        word: string::String,
-        guessed_chars: vector<u8>,
-        turns_left: u64,
-        game_events: event::EventHandle<GameEvent>
+        word: vector<u8>,
+        guessed_letters: vector<u8>,
+        remaining_attempts: u8,
+        game_over: bool,
     }
 
-    /// Event to track game progress
-    struct GameEvent has drop, store {
-        event_type: string::String,
-        message: string::String
+    /// Constants
+    const MAX_ATTEMPTS: u8 = 6;
+
+    /// Errors
+    const E_GAME_NOT_INITIALIZED: u64 = 1;
+    const E_GAME_ALREADY_INITIALIZED: u64 = 2;
+    const E_GAME_OVER: u64 = 3;
+    const E_INVALID_GUESS: u64 = 4;
+
+    /// Initializes a new Hangman game for the account
+    public entry fun initialize_game(account: &signer) {
+        let account_addr = signer::address_of(account);
+        assert!(!exists<GameState>(account_addr), E_GAME_ALREADY_INITIALIZED);
+
+        let chosen_word = get_random_word_deterministic();
+
+        move_to(account, GameState {
+            word: chosen_word,
+            guessed_letters: vector::empty(),
+            remaining_attempts: MAX_ATTEMPTS,
+            game_over: false,
+        });
     }
 
-    /// Initialize a new game
-    public entry fun initialize_game(player: &signer) {
-        let words = vector[
-            string::utf8(b"secret"),
-            string::utf8(b"puzzle"), 
-            string::utf8(b"hangman")
-        ];
+    /// Makes a guess in the Hangman game
+    public entry fun make_guess(account: &signer, letter: u8) acquires GameState {
+        let account_addr = signer::address_of(account);
+        assert!(exists<GameState>(account_addr), E_GAME_NOT_INITIALIZED);
+        
+        let game_state = borrow_global_mut<GameState>(account_addr);
+        assert!(!game_state.game_over, E_GAME_OVER);
+        assert!(letter >= 97 && letter <= 122, E_INVALID_GUESS); // Ensure lowercase a-z
 
-        // Deterministic word selection
-        let player_addr = account::get_address(player);
-        let seed = account::get_sequence_number(player_addr);
-        let word_index = seed % vector::length(&words);
-        let selected_word = *vector::borrow(&words, word_index);
-
-        // Create game state
-        let game_state = GameState {
-            word: selected_word,
-            guessed_chars: vector::empty(),
-            turns_left: 6,
-            game_events: account::new_event_handle<GameEvent>(player)
-        };
-
-        // Move the game state to the player's account
-        move_to(player, game_state);
-    }
-
-    /// Guess a character in the game
-    public entry fun guess_char(player: &signer, guess: u8) acquires GameState {
-        let player_addr = account::get_address(player);
-        let game_state = borrow_global_mut<GameState>(player_addr);
-
-        // Check if character already guessed
-        if (vector::contains(&game_state.guessed_chars, &guess)) {
-            event::emit_event(&mut game_state.game_events, GameEvent {
-                event_type: string::utf8(b"duplicate_guess"),
-                message: string::utf8(b"Character already guessed")
-            });
-            return
-        };
-
-        // Add to guessed characters
-        vector::push_back(&mut game_state.guessed_chars, guess);
-
-        // Check if guess is in word
-        let word_bytes = string::bytes(&game_state.word);
-        if (!vector::contains(word_bytes, &guess)) {
-            game_state.turns_left = game_state.turns_left - 1;
+        if (!vector::contains(&game_state.guessed_letters, &letter)) {
+            vector::push_back(&mut game_state.guessed_letters, letter);
             
-            event::emit_event(&mut game_state.game_events, GameEvent {
-                event_type: string::utf8(b"wrong_guess"),
-                message: string::utf8(b"Incorrect guess")
-            });
-        } else {
-            event::emit_event(&mut game_state.game_events, GameEvent {
-                event_type: string::utf8(b"correct_guess"),
-                message: string::utf8(b"Correct guess!")
-            });
-        };
-
-        // Display game state
-        display_word(game_state);
-    }
-
-    /// Display the current state of the word
-    fun display_word(game_state: &mut GameState) {
-        let word_bytes = string::bytes(&game_state.word);
-        let display = vector::empty<u8>();
-        let remaining_chars = vector::length(word_bytes);
-
-        // Build display string
-        let i = 0;
-        while (i < vector::length(word_bytes)) {
-            let current_char = *vector::borrow(word_bytes, i);
-            
-            if (vector::contains(&game_state.guessed_chars, &current_char)) {
-                vector::push_back(&mut display, current_char);
-                remaining_chars = remaining_chars - 1;
-            } else {
-                vector::push_back(&mut display, b'_');
+            if (!vector::contains(&game_state.word, &letter)) {
+                game_state.remaining_attempts = game_state.remaining_attempts - 1;
             };
+        };
 
-            vector::push_back(&mut display, b' ');
+        // Check if the game is over
+        game_state.game_over = game_state.remaining_attempts == 0 || 
+                               is_word_guessed(&game_state.word, &game_state.guessed_letters);
+    }
+
+    /// Resets the game for the account
+    public entry fun reset_game(account: &signer) acquires GameState {
+        let account_addr = signer::address_of(account);
+        assert!(exists<GameState>(account_addr), E_GAME_NOT_INITIALIZED);
+
+        let game_state = borrow_global_mut<GameState>(account_addr);
+        game_state.word = get_random_word_deterministic();
+        game_state.guessed_letters = vector::empty();
+        game_state.remaining_attempts = MAX_ATTEMPTS;
+        game_state.game_over = false;
+    }
+
+    /// Gets the current game state
+    public fun get_game_state(account_addr: address): (vector<u8>, vector<u8>, u8, bool) acquires GameState {
+        assert!(exists<GameState>(account_addr), E_GAME_NOT_INITIALIZED);
+        let game_state = borrow_global<GameState>(account_addr);
+        (game_state.word, game_state.guessed_letters, game_state.remaining_attempts, game_state.game_over)
+    }
+
+    /// Checks if the game is won
+    public fun is_game_won(account_addr: address): bool acquires GameState {
+        assert!(exists<GameState>(account_addr), E_GAME_NOT_INITIALIZED);
+        let game_state = borrow_global<GameState>(account_addr);
+        is_word_guessed(&game_state.word, &game_state.guessed_letters)
+    }
+
+    /// Helper function to check if all letters in the word have been guessed
+    fun is_word_guessed(word: &vector<u8>, guessed_letters: &vector<u8>): bool {
+        let i = 0;
+        let len = vector::length(word);
+        while (i < len) {
+            let letter = vector::borrow(word, i);
+            if (!vector::contains(guessed_letters, letter)) {
+                return false
+            };
             i = i + 1;
         };
-
-        // Convert display to string and emit event
-        let display_str = string::utf8(display);
-        event::emit_event(&mut game_state.game_events, GameEvent {
-            event_type: string::utf8(b"word_state"),
-            message: display_str
-        });
-
-        // Check win/lose conditions
-        if (remaining_chars == 0) {
-            event::emit_event(&mut game_state.game_events, GameEvent {
-                event_type: string::utf8(b"game_result"),
-                message: string::utf8(b"Congratulations! You won!")
-            });
-        } else if (game_state.turns_left == 0) {
-            event::emit_event(&mut game_state.game_events, GameEvent {
-                event_type: string::utf8(b"game_result"),
-                message: string::utf8(b"Game Over! You ran out of turns.")
-            });
-        };
+        true
     }
 
-    /// Check if the game is over
-    public fun is_game_over(player: address): bool acquires GameState {
-        let game_state = borrow_global<GameState>(player);
-        game_state.turns_left == 0
-    }
-
-    /// Remove game state when game is complete
-    public entry fun cleanup_game(player: &signer) acquires GameState {
-        let player_addr = account::get_address(player);
-        if (is_game_over(player_addr)) {
-            // Properly extract and destroy the resource
-            let GameState { word: _, guessed_chars: _, turns_left: _, game_events } = move_from<GameState>(player_addr);
-            
-            // Destroy the event handle
-            event::destroy_handle(game_events);
-        };
+    /// Helper function to deterministically select a word
+    fun get_random_word_deterministic(): vector<u8> {
+        let words = vector[
+            b"aptos",
+            b"blockchain",
+            b"crypto",
+            b"decentralized",
+            b"finance",
+            b"smart",
+            b"contract",
+            b"wallet",
+            b"token",
+            b"network",
+            b"stackup"
+        ];
+        
+        let seed = timestamp::now_microseconds();
+        let index = seed % (vector::length(&words) as u64);
+        *vector::borrow(&words, (index as u64))
     }
 }
