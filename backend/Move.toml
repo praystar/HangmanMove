@@ -1,5 +1,5 @@
 [package]
-name = "Hang-man"
+name = "hangman"
 version = "1.0.0"
 authors = []
 [addresses]
